@@ -1,56 +1,22 @@
-import base64
-import hashlib
-import hmac
-import json
+"""Send one simulated sign-in: the CEO account logging in successfully at 3 AM from Lagos.
+
+Usage:
+    export LA_WORKSPACE_ID=...    # PowerShell: $env:LA_WORKSPACE_ID="..."
+    export LA_PRIMARY_KEY=...
+    python test_log.py
+"""
+
 import datetime
-import requests
+import json
 
+from common import load_credentials, post_logs
 
-WORKSPACE_ID = "***************"
-PRIMARY_KEY = "*****************"
-LOG_TYPE = "SigninLogs"  
-# ==========================================================
+LOG_TYPE = "SigninLogs"  # lands in the custom table SigninLogs_CL
 
-def build_signature(workspace_id, primary_key, date, content_length, method, content_type, resource):
-    x_headers = f"x-ms-date:{date}"
-    string_to_hash = f"{method}\n{content_length}\n{content_type}\n{x_headers}\n{resource}"
-    bytes_to_hash = bytes(string_to_hash, encoding="utf-8")
-    decoded_key = base64.b64decode(primary_key)
-    encoded_hash = base64.b64encode(
-        hmac.new(decoded_key, bytes_to_hash, digestmod=hashlib.sha256).digest()
-    ).decode()
-    return f"SharedKey {workspace_id}:{encoded_hash}"
-
-def post_log(workspace_id, primary_key, body, log_type):
-    method = "POST"
-    content_type = "application/json"
-    resource = "/api/logs"
-    rfc1123date = datetime.datetime.utcnow().strftime("%a, %d %b %Y %H:%M:%S GMT")
-    content_length = len(body)
-
-    signature = build_signature(
-        workspace_id, primary_key, rfc1123date, content_length, method, content_type, resource
-    )
-
-    uri = f"https://{workspace_id}.ods.opinsights.azure.com{resource}?api-version=2016-04-01"
-
-    headers = {
-        "content-type": content_type,
-        "Authorization": signature,
-        "Log-Type": log_type,
-        "x-ms-date": rfc1123date,
-    }
-
-    response = requests.post(uri, data=body, headers=headers)
-    print("Status code:", response.status_code)
-    if response.status_code == 200:
-        print("✅ Log đã được server chấp nhận thành công!")
-    else:
-        print("❌ Có lỗi xảy ra. Response:", response.text)
-    return response.status_code
 
 if __name__ == "__main__":
-    # 1 dòng log giả: đăng nhập CEO lúc 3AM từ Lagos (theo đúng scenario project)
+    workspace_id, primary_key = load_credentials()
+
     sample_log = [
         {
             "TimeGenerated": datetime.datetime.utcnow().isoformat() + "Z",
@@ -62,5 +28,6 @@ if __name__ == "__main__":
         }
     ]
 
-    body = json.dumps(sample_log)
-    post_log(WORKSPACE_ID, PRIMARY_KEY, body, LOG_TYPE)
+    status, text = post_logs(workspace_id, primary_key, json.dumps(sample_log), LOG_TYPE)
+    print("Status code:", status)
+    print("Accepted." if status == 200 else f"Error: {text}")
